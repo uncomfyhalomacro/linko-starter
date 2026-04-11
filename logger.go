@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -37,6 +36,10 @@ func initializeLogger() (*slog.Logger, *bufio.Writer, *os.File, error) {
 		return nil, nil, nil, err
 	}
 	bufferedFile := bufio.NewWriterSize(logFile, 8192)
-	multiWriter := io.MultiWriter(os.Stderr, bufferedFile)
-	return slog.New(slog.NewTextHandler(multiWriter, nil)), bufferedFile, logFile, nil
+	debugHandler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{AddSource: false,
+		Level: slog.LevelDebug,
+	})
+	infoHandler := slog.NewTextHandler(bufferedFile, &slog.HandlerOptions{AddSource: false, Level: slog.LevelInfo})
+
+	return slog.New(slog.NewMultiHandler(debugHandler, infoHandler)), bufferedFile, logFile, nil
 }
