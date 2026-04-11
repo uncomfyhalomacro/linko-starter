@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	"fmt"
 
 	"boot.dev/linko/internal/store"
 )
@@ -24,12 +25,18 @@ func main() {
 }
 
 func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir string) int {
-	st, err := store.New(dataDir)
+	l, b, f, err := initializeLogger()
 	if err != nil {
-		logger.Printf("failed to create store: %v", err)
+		fmt.Fprintf(os.Stderr, "failed to initialize logger: %v\n", err)
 		return 1
 	}
-	s := newServer(*st, httpPort, cancel)
+
+	st, err := store.New(dataDir, l)
+	if err != nil {
+		l.Error(fmt.Sprintf("failed to create store: %v", err))
+		return 1
+	}
+	s := newServer(*st, httpPort, cancel, l)
 	var serverErr error
 	go func() {
 		serverErr = s.start()
@@ -40,12 +47,16 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 	defer cancel()
 
 	if err := s.shutdown(shutdownCtx); err != nil {
-		logger.Printf("failed to shutdown server: %v", err)
+		l.Error(fmt.Sprintf("failed to shutdown server: %v", err))
 		return 1
 	}
 	if serverErr != nil {
-		logger.Printf("server error: %v", serverErr)
+		l.Error(fmt.Sprintf("server error: %v", serverErr))
 		return 1
+	}
+	if f != nil {
+		b.Flush()
+		f.Close()
 	}
 	return 0
 }
