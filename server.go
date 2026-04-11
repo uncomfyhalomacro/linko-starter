@@ -1,10 +1,10 @@
 package main
 
 import (
-        "log"
+        "fmt"
 	"context"
 	"errors"
-	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -52,7 +52,7 @@ func (s *server) start() error {
 		return err
 	}
 	addr := ln.Addr().(*net.TCPAddr)
-	log.Printf("Linko is running on http://localhost:%d\n", addr.Port)
+	log.Printf("Linko is running on http://localhost:%d", addr.Port)
 	return nil
 }
 
