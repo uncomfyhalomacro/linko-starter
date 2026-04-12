@@ -3,17 +3,28 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 )
+
+type StructuredLog struct {
+	Msg       *string
+	Method    *string
+	Path      *string
+	ClientIp *string
+	w io.Writer
+	mu *sync.Mutex
+}
 
 func requestLogger(l *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			next.ServeHTTP(w, r)
-			l.Info(fmt.Sprintf("Served request: %s %s", r.Method, r.URL.Path))
+			l.Info("Served request", "method", r.Method, "path", r.URL.Path, "client_ip", r.RemoteAddr)
 		})
 	}
 
@@ -39,7 +50,7 @@ func initializeLogger() (*slog.Logger, *bufio.Writer, *os.File, error) {
 	debugHandler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{AddSource: false,
 		Level: slog.LevelDebug,
 	})
-	infoHandler := slog.NewTextHandler(bufferedFile, &slog.HandlerOptions{AddSource: false, Level: slog.LevelInfo})
+	infoHandler := slog.NewJSONHandler(bufferedFile, &slog.HandlerOptions{AddSource: false, Level: slog.LevelInfo})
 
 	return slog.New(slog.NewMultiHandler(debugHandler, infoHandler)), bufferedFile, logFile, nil
 }
