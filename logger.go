@@ -12,12 +12,12 @@ import (
 )
 
 type StructuredLog struct {
-	Msg       *string
-	Method    *string
-	Path      *string
+	Msg      *string
+	Method   *string
+	Path     *string
 	ClientIp *string
-	w io.Writer
-	mu *sync.Mutex
+	w        io.Writer
+	mu       *sync.Mutex
 }
 
 func requestLogger(l *slog.Logger) func(http.Handler) http.Handler {
@@ -47,10 +47,37 @@ func initializeLogger() (*slog.Logger, *bufio.Writer, *os.File, error) {
 		return nil, nil, nil, err
 	}
 	bufferedFile := bufio.NewWriterSize(logFile, 8192)
-	debugHandler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{AddSource: false,
-		Level: slog.LevelDebug,
-	})
-	infoHandler := slog.NewJSONHandler(bufferedFile, &slog.HandlerOptions{AddSource: false, Level: slog.LevelInfo})
+	debugHandler := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+		AddSource: true,
+		Level:     slog.LevelDebug,
+
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			if a.Key == slog.SourceKey {
+				val := a.Value.Any().(*slog.Source)
+				trace := fmt.Sprintf("%s:%d", val.File, val.Line)
+				return slog.GroupAttrs("error", slog.Attr{Key: "fn", Value: slog.StringValue(val.Function)}, slog.Attr{Key: "stack_trace", Value: slog.StringValue(trace)})
+			}
+			if a.Key == "error" {
+				return slog.Any("cause", a.Value)
+			}
+			return a
+		}})
+
+	infoHandler := slog.NewJSONHandler(bufferedFile, &slog.HandlerOptions{
+		AddSource: true,
+		Level:     slog.LevelError,
+
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			if a.Key == slog.SourceKey {
+				val := a.Value.Any().(*slog.Source)
+				trace := fmt.Sprintf("%s:%d", val.File, val.Line)
+				return slog.GroupAttrs("error", slog.Attr{Key: "fn", Value: slog.StringValue(val.Function)}, slog.Attr{Key: "stack_trace", Value: slog.StringValue(trace)})
+			}
+			if a.Key == "error" {
+				return slog.Any("cause", a.Value)
+			}
+			return a
+		}})
 
 	return slog.New(slog.NewMultiHandler(debugHandler, infoHandler)), bufferedFile, logFile, nil
 }
