@@ -13,4 +13,3 @@ func httpError(ctx context.Context, w http.ResponseWriter, status int, err error
 	}
 	http.Error(w, err.Error(), status)
 }
-

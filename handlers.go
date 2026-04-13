@@ -17,6 +17,7 @@ import (
 )
 
 const shortURLLen = len("http://localhost:8080/") + 6
+
 var (
 	redirectsMu sync.Mutex
 	redirects   []string
@@ -42,23 +43,23 @@ func (s *server) handlerShortenLink(w http.ResponseWriter, r *http.Request) {
 	}
 	longURL := r.FormValue("url")
 	if longURL == "" {
-    		err := fmt.Errorf("missing url parameter")
-    		httpError(r.Context(), w, http.StatusBadRequest, err) 
+		err := fmt.Errorf("missing url parameter")
+		httpError(r.Context(), w, http.StatusBadRequest, err)
 		return
 	}
 	u, err := url.Parse(longURL)
 	if err != nil || u.Scheme == "" || u.Host == "" {
-    		httpError(r.Context(), w, http.StatusBadRequest, err) 
+		httpError(r.Context(), w, http.StatusBadRequest, err)
 		return
 	}
 	if err := checkDestination(longURL); err != nil {
-    		httpError(r.Context(), w, http.StatusBadRequest, err) 
+		httpError(r.Context(), w, http.StatusBadRequest, err)
 		http.Error(w, fmt.Sprintf("invalid target URL: %v", err), http.StatusBadRequest)
 		return
 	}
 	shortCode, err := s.store.Create(r.Context(), longURL)
 	if err != nil {
-    		httpError(r.Context(), w, http.StatusInternalServerError, err) 
+		httpError(r.Context(), w, http.StatusInternalServerError, err)
 		return
 	}
 	s.logger.Info("Successfully generated short code", "shortcode", shortCode, "longURL", longURL)
