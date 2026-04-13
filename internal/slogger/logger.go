@@ -95,12 +95,6 @@ func RequestLogger(l *slog.Logger) func(http.Handler) http.Handler {
 			spyWriter := &spyResponseWriter{ResponseWriter: w}
 			spyReader := &spyReadCloser{ReadCloser: r.Body}
 			r.Body = spyReader
-			reqId := r.Header.Get("X-Request-ID")
-			if reqId == "" {
-    				w.Header().Set("X-Request-ID", rand.Text())
-			} else {
-    				w.Header().Set("X-Request-ID", reqId)
-			}
 			next.ServeHTTP(spyWriter, r)
 			attrs := []slog.Attr{
 				slog.String("method", r.Method), slog.String("path", r.URL.Path), slog.String("client_ip", r.RemoteAddr), slog.Duration("duration", time.Since(start)),
@@ -108,6 +102,7 @@ func RequestLogger(l *slog.Logger) func(http.Handler) http.Handler {
 				slog.Int("response_body_bytes", spyWriter.bytesWritten),
 				slog.Int("request_body_bytes", spyReader.bytesRead),
 			}
+			reqId := r.Header.Get("X-Request-ID")
 			if reqId != "" {
     				attrs = append(attrs, slog.String("request_id", reqId))
 			} else {

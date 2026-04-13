@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"os"
 
-	"boot.dev/linko/internal/store"
 	"boot.dev/linko/internal/slogger"
+	"boot.dev/linko/internal/store"
 )
 
 type server struct {
@@ -35,13 +35,13 @@ func newServer(store store.Store, port int, cancel context.CancelFunc, logger *s
 		logger:     logger,
 	}
 
-	mux.HandleFunc("GET /", s.handlerIndex)
-	mux.Handle("POST /api/login", s.authMiddleware(http.HandlerFunc(s.handlerLogin)))
-	mux.Handle("POST /api/shorten", s.authMiddleware(http.HandlerFunc(s.handlerShortenLink)))
-	mux.Handle("GET /api/stats", s.authMiddleware(http.HandlerFunc(s.handlerStats)))
-	mux.Handle("GET /api/urls", s.authMiddleware(http.HandlerFunc(s.handlerListURLs)))
-	mux.HandleFunc("GET /{shortCode}", s.handlerRedirect)
-	mux.HandleFunc("POST /admin/shutdown", s.handlerShutdown)
+	mux.Handle("GET /", setCustomResponseHeaders(http.HandlerFunc(s.handlerIndex)))
+	mux.Handle("POST /api/login", setCustomResponseHeaders(s.authMiddleware(http.HandlerFunc(s.handlerLogin))))
+	mux.Handle("POST /api/shorten", setCustomResponseHeaders(s.authMiddleware(http.HandlerFunc(s.handlerShortenLink))))
+	mux.Handle("GET /api/stats", setCustomResponseHeaders(s.authMiddleware(http.HandlerFunc(s.handlerStats))))
+	mux.Handle("GET /api/urls", setCustomResponseHeaders(s.authMiddleware(http.HandlerFunc(s.handlerListURLs))))
+	mux.Handle("GET /{shortCode}", setCustomResponseHeaders(http.HandlerFunc(s.handlerRedirect)))
+	mux.Handle("POST /admin/shutdown", setCustomResponseHeaders(http.HandlerFunc(s.handlerShutdown)))
 
 	return s
 }
@@ -71,6 +71,6 @@ func (s *server) handlerShutdown(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Successfully shutdown")) 
+	w.Write([]byte("Successfully shutdown"))
 	go s.cancel()
 }
