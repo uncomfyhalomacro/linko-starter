@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"boot.dev/linko/internal/store"
+	"boot.dev/linko/internal/slogger"
 )
 
 func main() {
@@ -25,7 +26,7 @@ func main() {
 }
 
 func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir string) int {
-	l, b, f, err := initializeLogger()
+	l, b, f, err := slogger.InitializeLogger()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to initialize logger: %v\n", err)
 		return 1

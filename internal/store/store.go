@@ -4,11 +4,11 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
-	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
+
+	"boot.dev/linko/internal/slogger"
 )
 
 type ShortURL struct {
@@ -28,7 +28,7 @@ const (
 )
 
 type Store struct {
-	dir string
+	dir    string
 	logger *slog.Logger
 }
 
@@ -37,7 +37,7 @@ func New(dir string, logger *slog.Logger) (*Store, error) {
 		return nil, err
 	}
 	return &Store{
-		dir: dir,
+		dir:    dir,
 		logger: logger,
 	}, nil
 }
@@ -68,17 +68,26 @@ func (s *Store) Create(_ context.Context, long string) (string, error) {
 const maxURLs = 10
 
 func (s *Store) List(ctx context.Context) ([]ShortURL, error) {
+	var errs []error
 	ch := make(chan ShortURL)
 	go s.walk(ctx, ch)
 	var urls []ShortURL
 	for e := range ch {
 		if e.Err != nil {
-			return urls, e.Err
+    			customErr := slogger.PathError{
+        			Err: e.Err,
+        			Path: e.LongURL,
+    			}
+			errs = append(errs, customErr)
 		}
 		urls = append(urls, e)
 		if len(urls) >= maxURLs {
 			break
 		}
+	}
+	if len(errs) > 1 {
+		s.logger.Info("returning multiple errors with Join?")
+		return nil, errors.Join(errs...)
 	}
 	return urls, nil
 }
@@ -93,7 +102,7 @@ func (s *Store) walk(ctx context.Context, ch chan<- ShortURL) {
 		if !e.IsDir() {
 			long, err := s.Lookup(ctx, e.Name())
 			if err != nil {
-				ch <- ShortURL{Err: fmt.Errorf("read %s: %w", filepath.Join(s.dir, e.Name()), err)}
+				ch <- ShortURL{Err: err, ShortCode: e.Name(), LongURL: long}
 				continue
 			}
 			ch <- ShortURL{ShortCode: e.Name(), LongURL: long}
@@ -102,15 +111,13 @@ func (s *Store) walk(ctx context.Context, ch chan<- ShortURL) {
 }
 
 func (s *Store) Lookup(_ context.Context, short string) (string, error) {
-	short = strings.ToUpper(short)
 	shortcodeFilepath := filepath.Join(s.dir, short)
 	data, err := os.ReadFile(shortcodeFilepath)
 	if errors.Is(err, os.ErrNotExist) {
-		return "", ErrNotFound
+		return shortcodeFilepath, ErrNotFound
 	}
 	if err != nil {
-		fmt.Printf("failed to read %s: %v\n", shortcodeFilepath, err)
-		return "", err
+		return shortcodeFilepath, err
 	}
 	return string(data), nil
 }

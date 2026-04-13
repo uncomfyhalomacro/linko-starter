@@ -1,7 +1,9 @@
-package main
+package slogger
 
 import (
 	"bufio"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -10,6 +12,27 @@ import (
 	"path/filepath"
 	"sync"
 )
+
+type multiErrors interface {
+	error
+	Unwrap() []error
+}
+
+type PathError struct {
+	Path string
+	Err  error
+}
+
+func (e PathError) Error() string {
+	if e.Err != nil {
+		return e.Err.Error()
+	}
+	return e.Path
+}
+
+func (e PathError) Unwrap() error {
+	return e.Err
+}
 
 type StructuredLog struct {
 	Msg      *string
@@ -20,7 +43,7 @@ type StructuredLog struct {
 	mu       *sync.Mutex
 }
 
-func requestLogger(l *slog.Logger) func(http.Handler) http.Handler {
+func RequestLogger(l *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			next.ServeHTTP(w, r)
@@ -30,7 +53,15 @@ func requestLogger(l *slog.Logger) func(http.Handler) http.Handler {
 
 }
 
-func initializeLogger() (*slog.Logger, *bufio.Writer, *os.File, error) {
+func LogAndUnwrap(l *slog.Logger, level slog.Level, msg string, e error, attrs ...slog.Attr) error {
+	l.LogAttrs(context.Background(), level,
+		msg,
+		attrs...,
+	)
+	return e
+}
+
+func InitializeLogger() (*slog.Logger, *bufio.Writer, *os.File, error) {
 	logPath := os.Getenv("LINKO_LOG_FILE")
 	if logPath == "" {
 		return slog.New(slog.NewTextHandler(os.Stderr, nil)), nil, nil, nil
@@ -47,7 +78,7 @@ func initializeLogger() (*slog.Logger, *bufio.Writer, *os.File, error) {
 		return nil, nil, nil, err
 	}
 	bufferedFile := bufio.NewWriterSize(logFile, 8192)
-	debugHandler := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+	debugHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		AddSource: true,
 		Level:     slog.LevelDebug,
 
@@ -63,7 +94,15 @@ func initializeLogger() (*slog.Logger, *bufio.Writer, *os.File, error) {
 			return a
 		}})
 
-	infoHandler := slog.NewJSONHandler(bufferedFile, &slog.HandlerOptions{
+	infoHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		AddSource: true,
+		Level:     slog.LevelInfo,
+
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			return a
+		}})
+
+	errorHandler := slog.NewJSONHandler(bufferedFile, &slog.HandlerOptions{
 		AddSource: true,
 		Level:     slog.LevelError,
 
@@ -74,10 +113,31 @@ func initializeLogger() (*slog.Logger, *bufio.Writer, *os.File, error) {
 				return slog.GroupAttrs("error", slog.Attr{Key: "fn", Value: slog.StringValue(val.Function)}, slog.Attr{Key: "stack_trace", Value: slog.StringValue(trace)})
 			}
 			if a.Key == "error" {
-				return slog.Any("cause", a.Value)
+				var errAttrs []slog.Attr
+				if errs, ok := a.Value.Any().(multiErrors); ok {
+
+					for i, err := range errs.Unwrap() {
+						key := fmt.Sprintf("error_%d", i+1)
+						var pathErr PathError
+						if errors.As(err, &pathErr) {
+							errAttrs = append(errAttrs,
+								slog.Group(
+									key,
+									slog.String("path", pathErr.Path),
+								),
+							)
+						} else {
+							errAttrs = append(errAttrs,
+								slog.Group(key, slog.String("cause", err.Error())),
+							)
+						}
+
+					}
+					return slog.GroupAttrs("errors", errAttrs...)
+				}
 			}
 			return a
 		}})
 
-	return slog.New(slog.NewMultiHandler(debugHandler, infoHandler)), bufferedFile, logFile, nil
+	return slog.New(slog.NewMultiHandler(debugHandler, infoHandler, errorHandler)), bufferedFile, logFile, nil
 }

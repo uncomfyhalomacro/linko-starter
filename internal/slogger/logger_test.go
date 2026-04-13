@@ -1,4 +1,4 @@
-package main
+package slogger
 
 import "net/http/httptest"
 import "testing"
@@ -19,7 +19,7 @@ func Test_requestLogger(t *testing.T) {
 		},
 	}))
 
-	requestLoggerMiddleware := requestLogger(logger)
+	requestLoggerMiddleware := RequestLogger(logger)
 	dummyHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
 	loggedHandler := requestLoggerMiddleware(dummyHandler)
 
