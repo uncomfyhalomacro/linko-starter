@@ -185,12 +185,11 @@ func InitializeLogger() (*slog.Logger, *bufio.Writer, *os.File, error) {
 
 					for i, err := range errs.Unwrap() {
 						key := fmt.Sprintf("error_%d", i+1)
-						var pathErr PathError
-						if errors.As(err, &pathErr) {
+						if ae, ok := errors.AsType[*PathError](err); ok {
 							errAttrs = append(errAttrs,
 								slog.Group(
 									key,
-									slog.String("path", pathErr.Path),
+									slog.String("path", ae.Path),
 								),
 							)
 						} else {
