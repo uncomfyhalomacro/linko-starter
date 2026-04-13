@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 
+	"boot.dev/linko/internal/slogger"
 	"boot.dev/linko/internal/store"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -36,7 +37,7 @@ func (s *server) handlerLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handlerShortenLink(w http.ResponseWriter, r *http.Request) {
-	user, ok := r.Context().Value(UserContextKey).(string)
+	user, ok := r.Context().Value(slogger.UserContextKey).(string)
 	if !ok || user == "" {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return

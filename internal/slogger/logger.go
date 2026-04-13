@@ -11,7 +11,17 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 )
+
+type contextKey string
+
+const UserContextKey contextKey = "user"
+const LogContextKey contextKey = "log_context"
+
+type LogContext struct {
+	Username string
+}
 
 type multiErrors interface {
 	error
@@ -43,11 +53,68 @@ type StructuredLog struct {
 	mu       *sync.Mutex
 }
 
+type spyReadCloser struct {
+	io.ReadCloser
+	bytesRead int
+}
+
+type spyResponseWriter struct {
+	http.ResponseWriter
+	bytesWritten int
+	statusCode   int
+}
+
+func (w *spyResponseWriter) Write(p []byte) (int, error) {
+	if w.statusCode == 0 {
+		w.statusCode = http.StatusOK
+	}
+	n, err := w.ResponseWriter.Write(p)
+	w.bytesWritten += n
+	return n, err
+}
+
+func (w *spyResponseWriter) WriteHeader(statusCode int) {
+	w.statusCode = statusCode
+	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (r *spyReadCloser) Read(p []byte) (int, error) {
+	n, err := r.ReadCloser.Read(p)
+	r.bytesRead += n
+	return n, err
+}
+
 func RequestLogger(l *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			next.ServeHTTP(w, r)
-			l.Info("Served request", "method", r.Method, "path", r.URL.Path, "client_ip", r.RemoteAddr)
+			logCtx := &LogContext{}
+			r = r.WithContext(context.WithValue(r.Context(), LogContextKey, logCtx))
+			start := time.Now()
+			spyWriter := &spyResponseWriter{ResponseWriter: w}
+			spyReader := &spyReadCloser{ReadCloser: r.Body}
+			r.Body = spyReader
+			next.ServeHTTP(spyWriter, r)
+			attrs := []slog.Attr{
+				slog.String("method", r.Method), slog.String("path", r.URL.Path), slog.String("client_ip", r.RemoteAddr), slog.Duration("duration", time.Since(start)),
+				slog.Int("response_status", spyWriter.statusCode),
+				slog.Int("response_body_bytes", spyWriter.bytesWritten),
+				slog.Int("request_body_bytes", spyReader.bytesRead),
+			}
+
+			if logCtx.Username != "" {
+				attrs = append(attrs, slog.String("user", logCtx.Username))
+			}
+
+			if spyWriter.statusCode >= 200 && spyWriter.statusCode < 300 {
+				l.LogAttrs(r.Context(), slog.LevelInfo, "Served request", attrs...)
+				return
+			}
+			if spyWriter.statusCode >= 400 {
+				l.LogAttrs(r.Context(), slog.LevelError, "Served request", attrs...)
+				return
+			}
+
+			l.LogAttrs(r.Context(), slog.LevelDebug, "Served request", attrs...)
 		})
 	}
 
@@ -94,7 +161,7 @@ func InitializeLogger() (*slog.Logger, *bufio.Writer, *os.File, error) {
 			return a
 		}})
 
-	infoHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+	infoHandler := slog.NewJSONHandler(bufferedFile, &slog.HandlerOptions{
 		AddSource: true,
 		Level:     slog.LevelInfo,
 
@@ -102,7 +169,7 @@ func InitializeLogger() (*slog.Logger, *bufio.Writer, *os.File, error) {
 			return a
 		}})
 
-	errorHandler := slog.NewJSONHandler(bufferedFile, &slog.HandlerOptions{
+	errorHandler := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 		AddSource: true,
 		Level:     slog.LevelError,
 

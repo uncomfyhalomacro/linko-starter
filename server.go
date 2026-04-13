@@ -69,6 +69,8 @@ func (s *server) handlerShutdown(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Successfully shutdown")) 
 	go s.cancel()
 }

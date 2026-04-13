@@ -1,15 +1,11 @@
 package main
 
 import (
-	"context"
 	"net/http"
 
+	"boot.dev/linko/internal/slogger"
 	"golang.org/x/crypto/bcrypt"
 )
-
-type contextKey string
-
-const UserContextKey contextKey = "user"
 
 var allowedUsers = map[string]string{
 	"frodo":   "$2a$10$B6O/n6teuCzpuh66jrUAdeaJ3WvXcxRkzpN0x7H.di9G9e/NGb9Me",
@@ -33,7 +29,6 @@ func (s *server) authMiddleware(next http.Handler) http.Handler {
 		}
 		ok, err := s.validatePassword(password, stored)
 		if err != nil {
-			s.logger.Error("error validating password", "user", username, "error", err)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}
@@ -41,7 +36,10 @@ func (s *server) authMiddleware(next http.Handler) http.Handler {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
-		r = r.WithContext(context.WithValue(r.Context(), UserContextKey, username))
+		logCtx, ok := r.Context().Value(slogger.LogContextKey).(*slogger.LogContext)
+		if ok && logCtx != nil {
+			logCtx.Username = username
+		}
 		next.ServeHTTP(w, r)
 	})
 }

@@ -3,14 +3,16 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
-	"fmt"
 
-	"boot.dev/linko/internal/store"
+	"boot.dev/linko/internal/build"
 	"boot.dev/linko/internal/slogger"
+	"boot.dev/linko/internal/store"
 )
 
 func main() {
@@ -31,6 +33,15 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 		fmt.Fprintf(os.Stderr, "failed to initialize logger: %v\n", err)
 		return 1
 	}
+	env := os.Getenv("ENV")
+	hostname, _ := os.Hostname()
+
+	l = l.With(
+		slog.String("git_sha", build.GitSHA),
+		slog.String("build_time", build.BuildTime),
+		slog.String("env", env),
+		slog.String("hostname", hostname),
+	)
 
 	st, err := store.New(dataDir, l)
 	if err != nil {
