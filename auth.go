@@ -20,29 +20,33 @@ func (s *server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		username, password, ok := r.BasicAuth()
 		if !ok {
-			err := fmt.Errorf("unauthorized")
-			httpError(r.Context(), w, http.StatusUnauthorized, err)
+			httpError(r.Context(), w, http.StatusUnauthorized, fmt.Errorf("unauthorized"))
 			return
 		}
+
 		stored, exists := allowedUsers[username]
 		if !exists {
-			err := fmt.Errorf("unauthorized")
-			httpError(r.Context(), w, http.StatusUnauthorized, err)
+			httpError(r.Context(), w, http.StatusUnauthorized, fmt.Errorf("unauthorized"))
 			return
 		}
-		ok, err := s.validatePassword(password, stored)
+
+		valid, err := s.validatePassword(password, stored)
 		if err != nil {
 			httpError(r.Context(), w, http.StatusInternalServerError, err)
 			return
 		}
-		if !ok {
-			httpError(r.Context(), w, http.StatusUnauthorized, err)
+
+		if !valid {
+			httpError(r.Context(), w, http.StatusUnauthorized, fmt.Errorf("unauthorized"))
 			return
 		}
+
 		logCtx, ok := r.Context().Value(slogger.LogContextKey).(*slogger.LogContext)
 		if ok && logCtx != nil {
-			logCtx.Username = username
+			(*logCtx).Username = username
 		}
+		// r = r.WithContext(context.WithValue(r.Context(), slogger.UserContextKey, &username))
+
 		next.ServeHTTP(w, r)
 	})
 }

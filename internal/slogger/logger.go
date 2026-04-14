@@ -115,11 +115,11 @@ func RequestLogger(l *slog.Logger) func(http.Handler) http.Handler {
 				attrs = append(attrs, slog.String("request_id", reqId))
 			}
 
-			if logCtx.Username != "" {
-				attrs = append(attrs, slog.String("user", logCtx.Username))
+			if (*logCtx).Username != "" {
+				attrs = append(attrs, slog.String("user", (*logCtx).Username))
 			}
 
-			if logCtx.Error != nil {
+			if (*logCtx).Error != nil {
 				attrs = append(attrs, slog.Group("error", slog.String("stack_trace", r.URL.Path), slog.String("message", logCtx.Error.Error())))
 			}
 

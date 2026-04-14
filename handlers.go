@@ -11,7 +11,6 @@ import (
 	"strings"
 	"sync"
 
-	"boot.dev/linko/internal/slogger"
 	"boot.dev/linko/internal/store"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -36,19 +35,15 @@ func (s *server) handlerLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handlerShortenLink(w http.ResponseWriter, r *http.Request) {
-	user, ok := r.Context().Value(slogger.UserContextKey).(string)
-	if !ok || user == "" {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
 	longURL := r.FormValue("url")
 	if longURL == "" {
-		err := fmt.Errorf("missing url parameter")
+		err := fmt.Errorf("invalid URL")
 		httpError(r.Context(), w, http.StatusBadRequest, err)
 		return
 	}
 	u, err := url.Parse(longURL)
 	if err != nil || u.Scheme == "" || u.Host == "" {
+		err := fmt.Errorf("invalid URL")
 		httpError(r.Context(), w, http.StatusBadRequest, err)
 		return
 	}
@@ -65,7 +60,7 @@ func (s *server) handlerShortenLink(w http.ResponseWriter, r *http.Request) {
 	s.logger.Info("Successfully generated short code", "shortcode", shortCode, "longURL", longURL)
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusCreated)
-	io.WriteString(w, shortCode)
+	w.Write([]byte(shortCode))
 }
 
 func (s *server) handlerRedirect(w http.ResponseWriter, r *http.Request) {
