@@ -5,6 +5,8 @@ go 1.26
 require golang.org/x/crypto v0.49.0
 
 require (
+	filippo.io/age v1.3.1 // indirect
+	filippo.io/hpke v0.4.0 // indirect
 	github.com/DeRuina/timberjack v1.4.1 // indirect
 	github.com/klauspost/compress v1.17.11 // indirect
 	github.com/lmittmann/tint v1.1.3 // indirect
