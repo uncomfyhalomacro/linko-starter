@@ -76,7 +76,7 @@ func (s *Store) List(ctx context.Context) ([]ShortURL, error) {
 		if e.Err != nil {
     			customErr := slogger.PathError{
         			Err: e.Err,
-        			Path: e.LongURL,
+        			Path: e.ShortCode,
     			}
 			errs = append(errs, customErr)
 		}

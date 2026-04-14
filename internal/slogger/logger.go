@@ -9,8 +9,10 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
@@ -92,16 +94,16 @@ func (r *spyReadCloser) Read(p []byte) (int, error) {
 }
 
 func redactIP(addr string) string {
-    host, _, err := net.SplitHostPort(addr)
-    if err != nil {
-        return "invalid ip addr"
-    }
-    ip := net.ParseIP(host)
-    if ip.DefaultMask() == nil {
-        return host
-    }
-    r := []rune(host)
-    return string(r[:len(r)-1]) + "x"
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "invalid ip addr"
+	}
+	ip := net.ParseIP(host)
+	if ip.DefaultMask() == nil {
+		return host
+	}
+	r := []rune(host)
+	return string(r[:len(r)-1]) + "x"
 }
 
 func RequestLogger(l *slog.Logger) func(http.Handler) http.Handler {
@@ -151,6 +153,8 @@ func RequestLogger(l *slog.Logger) func(http.Handler) http.Handler {
 
 }
 
+var sensitiveKeys = []string{"password", "key", "apikey", "secret", "pin", "creditcardno", "user"}
+
 func LogAndUnwrap(l *slog.Logger, level slog.Level, msg string, e error, attrs ...slog.Attr) error {
 	l.LogAttrs(context.Background(), level,
 		msg,
@@ -177,6 +181,25 @@ func InitializeLogger() (*slog.Logger, io.WriteCloser, error) {
 			Level:      slog.LevelInfo,
 			TimeFormat: "",
 			NoColor:    !toColor,
+			ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+				str, ok := a.Value.Any().(string)
+				if ok {
+					u, err := url.Parse(str)
+					if err != nil {
+						return a
+					}
+					if name := u.User.Username(); name != "" {
+						return slog.Attr{Key: a.Key, Value: slog.StringValue("[REDACTED]")}
+					}
+					if _, ok := u.User.Password(); ok {
+						return slog.Attr{Key: a.Key, Value: slog.StringValue("[REDACTED]")}
+					}
+				}
+				if slices.Contains(sensitiveKeys, a.Key) {
+					return slog.String(a.Key, "[REDACTED]")
+				}
+				return a
+			},
 		}), sysloghandler)), nil, nil
 	}
 	curdir, err := os.Getwd()
@@ -206,6 +229,22 @@ func InitializeLogger() (*slog.Logger, io.WriteCloser, error) {
 		Level:     slog.LevelDebug,
 
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			str, ok := a.Value.Any().(string)
+			if ok {
+				u, err := url.Parse(str)
+				if err != nil {
+					return a
+				}
+				if name := u.User.Username(); name != "" {
+					return slog.Attr{Key: a.Key, Value: slog.StringValue("[REDACTED]")}
+				}
+				if _, ok := u.User.Password(); ok {
+					return slog.Attr{Key: a.Key, Value: slog.StringValue("[REDACTED]")}
+				}
+			}
+			if slices.Contains(sensitiveKeys, a.Key) {
+				return slog.String(a.Key, "[REDACTED]")
+			}
 			if a.Key == slog.SourceKey {
 				val := a.Value.Any().(*slog.Source)
 				trace := fmt.Sprintf("%s:%d", val.File, val.Line)
@@ -222,6 +261,22 @@ func InitializeLogger() (*slog.Logger, io.WriteCloser, error) {
 		Level:     slog.LevelInfo,
 
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			str, ok := a.Value.Any().(string)
+			if ok {
+				u, err := url.Parse(str)
+				if err != nil {
+					return a
+				}
+				if name := u.User.Username(); name != "" {
+					return slog.Attr{Key: a.Key, Value: slog.StringValue("[REDACTED]")}
+				}
+				if _, ok := u.User.Password(); ok {
+					return slog.Attr{Key: a.Key, Value: slog.StringValue("[REDACTED]")}
+				}
+			}
+			if slices.Contains(sensitiveKeys, a.Key) {
+				return slog.String(a.Key, "[REDACTED]")
+			}
 			return a
 		}})
 
@@ -230,6 +285,22 @@ func InitializeLogger() (*slog.Logger, io.WriteCloser, error) {
 		Level:     slog.LevelError,
 
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			str, ok := a.Value.Any().(string)
+			if ok {
+				u, err := url.Parse(str)
+				if err != nil {
+					return a
+				}
+				if name := u.User.Username(); name != "" {
+					return slog.Attr{Key: a.Key, Value: slog.StringValue("[REDACTED]")}
+				}
+				if _, ok := u.User.Password(); ok {
+					return slog.Attr{Key: a.Key, Value: slog.StringValue("[REDACTED]")}
+				}
+			}
+			if slices.Contains(sensitiveKeys, a.Key) {
+				return slog.String(a.Key, "[REDACTED]")
+			}
 			if a.Key == slog.SourceKey {
 				val := a.Value.Any().(*slog.Source)
 				trace := fmt.Sprintf("%s:%d", val.File, val.Line)
