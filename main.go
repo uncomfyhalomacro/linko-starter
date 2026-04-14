@@ -28,7 +28,7 @@ func main() {
 }
 
 func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir string) int {
-	l, b, f, err := slogger.InitializeLogger()
+	l, f, err := slogger.InitializeLogger()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to initialize logger: %v\n", err)
 		return 1
@@ -67,7 +67,6 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 		return 1
 	}
 	if f != nil {
-		b.Flush()
 		f.Close()
 	}
 	return 0

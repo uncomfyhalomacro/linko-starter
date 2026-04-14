@@ -1,18 +1,23 @@
 package slogger
 
 import (
-	"bufio"
 	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/DeRuina/timberjack"
+	"github.com/lmittmann/tint"
+	"github.com/mattn/go-isatty"
+	slogsyslog "github.com/samber/slog-syslog/v2"
 )
 
 type contextKey string
@@ -104,10 +109,10 @@ func RequestLogger(l *slog.Logger) func(http.Handler) http.Handler {
 			}
 			reqId := r.Header.Get("X-Request-ID")
 			if reqId != "" {
-    				attrs = append(attrs, slog.String("request_id", reqId))
+				attrs = append(attrs, slog.String("request_id", reqId))
 			} else {
-    				reqId = rand.Text()
-    				attrs = append(attrs, slog.String("request_id", reqId))
+				reqId = rand.Text()
+				attrs = append(attrs, slog.String("request_id", reqId))
 			}
 
 			if logCtx.Username != "" {
@@ -141,23 +146,45 @@ func LogAndUnwrap(l *slog.Logger, level slog.Level, msg string, e error, attrs .
 	return e
 }
 
-func InitializeLogger() (*slog.Logger, *bufio.Writer, *os.File, error) {
+func InitializeLogger() (*slog.Logger, io.WriteCloser, error) {
+	toColor := isatty.IsTerminal(os.Stderr.Fd()) || isatty.IsCygwinTerminal(os.Stderr.Fd()) || isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd())
 	logPath := os.Getenv("LINKO_LOG_FILE")
+	syslogWriter, err := net.Dial("udp", "localhost:9999")
+	if err != nil {
+		panic(err)
+	}
+	syslogOptions := &slogsyslog.Option{
+		Level:  slog.LevelInfo,
+		Writer: syslogWriter,
+	}
+	sysloghandler := syslogOptions.NewSyslogHandler()
 	if logPath == "" {
-		return slog.New(slog.NewTextHandler(os.Stderr, nil)), nil, nil, nil
+		return slog.New(slog.NewMultiHandler(tint.NewHandler(os.Stdout, &tint.Options{
+			AddSource:  false,
+			Level:      slog.LevelInfo,
+			TimeFormat: "",
+			NoColor:    !toColor,
+		}), sysloghandler)), nil, nil
 	}
 	curdir, err := os.Getwd()
 	if err != nil {
 		slog.Error(fmt.Sprintf("failed to get cwd: %v", err))
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	logPath = filepath.Join(curdir, logPath)
-	logFile, err := os.OpenFile(logPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644)
 	if err != nil {
 		slog.Error(fmt.Sprintf("failed to open log file: %v", err))
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
-	bufferedFile := bufio.NewWriterSize(logFile, 8192)
+	logger := &timberjack.Logger{
+		Filename:    logPath,
+		MaxSize:     1,
+		MaxAge:      28,
+		MaxBackups:  10,
+		LocalTime:   false,
+		Compress:    true,
+		Compression: "zstd",
+	}
 	debugHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		AddSource: true,
 		Level:     slog.LevelDebug,
@@ -174,7 +201,7 @@ func InitializeLogger() (*slog.Logger, *bufio.Writer, *os.File, error) {
 			return a
 		}})
 
-	infoHandler := slog.NewJSONHandler(bufferedFile, &slog.HandlerOptions{
+	infoHandler := slog.NewJSONHandler(logger, &slog.HandlerOptions{
 		AddSource: true,
 		Level:     slog.LevelInfo,
 
@@ -182,7 +209,7 @@ func InitializeLogger() (*slog.Logger, *bufio.Writer, *os.File, error) {
 			return a
 		}})
 
-	errorHandler := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+	errorHandler := slog.NewJSONHandler(logger, &slog.HandlerOptions{
 		AddSource: true,
 		Level:     slog.LevelError,
 
@@ -218,5 +245,5 @@ func InitializeLogger() (*slog.Logger, *bufio.Writer, *os.File, error) {
 			return a
 		}})
 
-	return slog.New(slog.NewMultiHandler(debugHandler, infoHandler, errorHandler)), bufferedFile, logFile, nil
+	return slog.New(slog.NewMultiHandler(debugHandler, infoHandler, errorHandler, sysloghandler)), logger, nil
 }
