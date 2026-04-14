@@ -91,6 +91,19 @@ func (r *spyReadCloser) Read(p []byte) (int, error) {
 	return n, err
 }
 
+func redactIP(addr string) string {
+    host, _, err := net.SplitHostPort(addr)
+    if err != nil {
+        return "invalid ip addr"
+    }
+    ip := net.ParseIP(host)
+    if ip.DefaultMask() == nil {
+        return host
+    }
+    r := []rune(host)
+    return string(r[:len(r)-1]) + "x"
+}
+
 func RequestLogger(l *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -102,7 +115,7 @@ func RequestLogger(l *slog.Logger) func(http.Handler) http.Handler {
 			r.Body = spyReader
 			next.ServeHTTP(spyWriter, r)
 			attrs := []slog.Attr{
-				slog.String("method", r.Method), slog.String("path", r.URL.Path), slog.String("client_ip", r.RemoteAddr), slog.Duration("duration", time.Since(start)),
+				slog.String("method", r.Method), slog.String("path", r.URL.Path), slog.String("client_ip", redactIP(r.RemoteAddr)), slog.Duration("duration", time.Since(start)),
 				slog.Int("response_status", spyWriter.statusCode),
 				slog.Int("response_body_bytes", spyWriter.bytesWritten),
 				slog.Int("request_body_bytes", spyReader.bytesRead),
