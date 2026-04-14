@@ -172,10 +172,12 @@ func InitializeLogger() (*slog.Logger, io.WriteCloser, error) {
 		return nil, nil, err
 	}
 	logPath = filepath.Join(curdir, logPath)
+
 	if err != nil {
 		slog.Error(fmt.Sprintf("failed to open log file: %v", err))
 		return nil, nil, err
 	}
+
 	logger := &timberjack.Logger{
 		Filename:    logPath,
 		MaxSize:     1,
@@ -185,6 +187,7 @@ func InitializeLogger() (*slog.Logger, io.WriteCloser, error) {
 		Compress:    true,
 		Compression: "zstd",
 	}
+
 	debugHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		AddSource: true,
 		Level:     slog.LevelDebug,
